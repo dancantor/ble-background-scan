@@ -3,8 +3,14 @@ import { WebPlugin } from '@capacitor/core';
 import type { BleBackgroundScanPlugin } from './definitions';
 
 export class BleBackgroundScanWeb extends WebPlugin implements BleBackgroundScanPlugin {
-  async echo(options: { value: string }): Promise<{ value: string }> {
-    console.log('ECHO', options);
-    return options;
+  initiateThreatDetection(): Promise<void> {
+    throw this.unimplemented('Not implemented on web.');
+  }
+  initiateBackgroundScan(): Promise<void> {
+    throw this.unimplemented('Not implemented on web.');
+  }
+
+  initialize(): Promise<void> {
+    throw this.unimplemented('Not implemented on web.');
   }
 }

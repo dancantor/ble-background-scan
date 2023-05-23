@@ -11,9 +11,41 @@ npx cap sync
 
 ## API
 
-<docgen-index></docgen-index>
+<docgen-index>
+
+* [`initiateBackgroundScan()`](#initiatebackgroundscan)
+* [`initiateThreatDetection()`](#initiatethreatdetection)
+* [`initialize()`](#initialize)
+
+</docgen-index>
 
 <docgen-api>
-<!-- run docgen to generate docs from the source -->
-<!-- More info: https://github.com/ionic-team/capacitor-docgen -->
+<!--Update the source file JSDoc comments and rerun docgen to update the docs below-->
+
+### initiateBackgroundScan()
+
+```typescript
+initiateBackgroundScan() => Promise<void>
+```
+
+--------------------
+
+
+### initiateThreatDetection()
+
+```typescript
+initiateThreatDetection() => Promise<void>
+```
+
+--------------------
+
+
+### initialize()
+
+```typescript
+initialize() => Promise<void>
+```
+
+--------------------
+
 </docgen-api>
