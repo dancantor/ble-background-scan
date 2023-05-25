@@ -23,7 +23,7 @@ public class RotatingDeviceIdStrategy extends ThreatDetectionStrategy{
                                 return accumulatedDevices;
                             }
                         );
-        if (getMaximumDistance(List.of(deviceWithAllLocations)) >= 1 && getMaximumTimeRange(List.of(deviceWithAllLocations)) >= 1) {
+        if (getMaximumDistance(List.of(deviceWithAllLocations)) >= 0.1 && getMaximumTimeRange(List.of(deviceWithAllLocations)) >= 1) {
             return allScanResults;
         }
         return new ArrayList<>();

@@ -4,6 +4,7 @@ import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
 
+import androidx.work.OutOfQuotaPolicy;
 import androidx.work.PeriodicWorkRequest;
 import androidx.work.WorkManager;
 
@@ -21,7 +22,7 @@ public class BleBackgroundScan {
     }
 
     public void initiateThreatDetection(Context context) {
-        PeriodicWorkRequest echoRequest = new PeriodicWorkRequest.Builder(ThreatDetectionWorker.class, 15, TimeUnit.MINUTES)
+        PeriodicWorkRequest echoRequest = new PeriodicWorkRequest.Builder(ThreatDetectionWorker.class, 16, TimeUnit.MINUTES)
                 .addTag("threatDetection")
 //                .setInitialDelay(1, TimeUnit.HOURS)
                 .build();

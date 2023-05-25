@@ -14,6 +14,7 @@ import android.location.LocationManager;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.util.Log;
 
 import androidx.annotation.RequiresApi;
@@ -36,6 +37,11 @@ import com.ubb.bachelor.blebackgroundscan.domain.model.ScanResultExtended;
 import org.apache.commons.lang3.ArrayUtils;
 
 
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
+
 import io.reactivex.schedulers.Schedulers;
 
 public class DeviceScannerService {
@@ -47,6 +53,8 @@ public class DeviceScannerService {
     private NotificationService notificationService;
     private Boolean isScanning = false;
     private final String SCANNING_TAG = DeviceScannerService.class.getSimpleName();
+    private long MAX_AGE_SECONDS = 100L;
+    private long MIN_ACCURACY_METER = 100L;
 
     private DeviceScannerService(Context context, BluetoothAdapter bluetoothAdapter,
                                  ScanResultRepository scanResultRepository) {
@@ -54,11 +62,7 @@ public class DeviceScannerService {
         this.bluetoothAdapter = bluetoothAdapter;
         this.bluetoothLeScanner = bluetoothAdapter.getBluetoothLeScanner();
         this.scanResultRepository = scanResultRepository;
-        try {
-            notificationService = NotificationService.getInstanceIfAvailable();
-        } catch(NotificationServiceNotInstantiated exception) {
-            Log.e("Worker", "NotificationService not initialized in worker");
-        }
+        this.notificationService = NotificationService.getInstance(context);
     }
 
     public static DeviceScannerService getInstance(
@@ -208,15 +212,15 @@ public class DeviceScannerService {
 
                 LocationServices
                         .getFusedLocationProviderClient(context)
-                        .getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null)
+                        .getLastLocation()
                         .addOnFailureListener(e -> resultCallback.error(e.getMessage()))
                         .addOnSuccessListener(
                                 location -> {
-                                    if (location == null) {
-                                        resultCallback.error("Location unavailable");
+                                    if (location != null && locationMatchesMinimumRequirements(location)) {
+                                        resultCallback.success(location);
                                     }
                                     else {
-                                        resultCallback.success(location);
+                                        resultCallback.error("Location unavailable");
                                     }
                                 }
                         );
@@ -226,6 +230,19 @@ public class DeviceScannerService {
         } else {
             resultCallback.error("Google Play Services not available");
         }
+    }
+
+
+    private boolean locationMatchesMinimumRequirements(Location location) {
+        return location.getAccuracy() <= MIN_ACCURACY_METER && getSecondsSinceLocation(location) <= MAX_AGE_SECONDS;
+    }
+    private long getSecondsSinceLocation(Location location) {
+        var millisecondsSinceLocation = (SystemClock.elapsedRealtimeNanos() - location.getElapsedRealtimeNanos()) / 1000000L;
+        var timeOfLocationEvent = System.currentTimeMillis() - millisecondsSinceLocation;
+        var locationDate = Instant.ofEpochMilli(timeOfLocationEvent).atZone(ZoneId.systemDefault()).toLocalDateTime();
+        var timeDiff = ChronoUnit.SECONDS.between(locationDate, LocalDateTime.now());
+
+        return timeDiff;
     }
 
     public Boolean isLocationServicesEnabled() {

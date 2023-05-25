@@ -15,7 +15,7 @@ public class ConstantDeviceIdStrategy extends ThreatDetectionStrategy{
         return allScanResults.stream()
                 .filter(
                         scanResultExtended -> getMaximumTimeRange(List.of(scanResultExtended)) >= 1 &&
-                                getMaximumDistance(List.of(scanResultExtended)) >= 1)
+                                getMaximumDistance(List.of(scanResultExtended)) >= 0.1)
                 .collect(Collectors.toList());
     }
 }

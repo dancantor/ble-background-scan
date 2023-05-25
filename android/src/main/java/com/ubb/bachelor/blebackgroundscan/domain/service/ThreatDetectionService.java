@@ -26,11 +26,8 @@ public class ThreatDetectionService {
     private ThreatDetectionService(Context context, ScanResultRepository scanResultRepository) {
         this.context = context;
         this.scanResultRepository = scanResultRepository;
-        try {
-            notificationService = NotificationService.getInstanceIfAvailable();
-        } catch(NotificationServiceNotInstantiated exception) {
-            Log.e("Worker", "NotificationService not initialized in worker");
-        }    }
+        this.notificationService = NotificationService.getInstance(context);
+    }
 
     public static ThreatDetectionService getInstance(Context context, ScanResultRepository scanResultRepository) {
         if (ThreatDetectionService.instance == null) {

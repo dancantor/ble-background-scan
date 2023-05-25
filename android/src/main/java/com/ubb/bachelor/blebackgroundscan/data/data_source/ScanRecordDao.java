@@ -34,4 +34,5 @@ public interface ScanRecordDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     public Completable insertLocation(LocationModel location);
+
 }

@@ -1,9 +1,13 @@
 package com.ubb.bachelor.blebackgroundscan;
 
+import static android.provider.Settings.ACTION_BLUETOOTH_SETTINGS;
+import static android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS;
+
 import android.Manifest;
 import android.app.NotificationManager;
 import android.bluetooth.BluetoothAdapter;
 import android.content.Context;
+import android.content.Intent;
 import android.os.Build;
 import android.bluetooth.*;
 import android.provider.Settings.*;
