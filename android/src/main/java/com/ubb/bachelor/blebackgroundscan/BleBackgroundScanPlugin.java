@@ -30,7 +30,10 @@ import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import com.getcapacitor.annotation.Permission;
 import com.getcapacitor.annotation.PermissionCallback;
+import com.ubb.bachelor.blebackgroundscan.data.dto.BlacklistForDevices;
 import com.ubb.bachelor.blebackgroundscan.data.repository.ScanResultRepository;
+import com.ubb.bachelor.blebackgroundscan.domain.model.BlacklistForAirTagAndSmartTag;
+import com.ubb.bachelor.blebackgroundscan.domain.service.DataPurgingService;
 import com.ubb.bachelor.blebackgroundscan.domain.service.DeviceScannerService;
 import com.ubb.bachelor.blebackgroundscan.domain.service.NotificationService;
 import com.ubb.bachelor.blebackgroundscan.domain.service.ThreatDetectionService;
@@ -90,6 +93,7 @@ public class BleBackgroundScanPlugin extends Plugin {
     private DeviceScannerService deviceScannerService;
     private ThreatDetectionService threatDetectionService;
     private NotificationService notificationService;
+    private DataPurgingService dataPurgingService;
 
     @PluginMethod()
     public void initiateBackgroundScan(PluginCall call) {
@@ -118,6 +122,18 @@ public class BleBackgroundScanPlugin extends Plugin {
         call.resolve();
     }
 
+    @PluginMethod()
+    public void initiatePeriodicDataPurging(PluginCall call) {
+        if (this.dataPurgingService != null) {
+            Log.i("plugin", "Periodic Data Purging");
+            implementation.initiatePeriodicDataPurging(getContext());
+        }
+        else {
+            Log.i("plugin_pl", "dataPurgingService no init");
+        }
+        call.resolve();
+    }
+
     @PluginMethod(returnType = PluginMethod.RETURN_PROMISE)
     public void initialize(PluginCall call) {
         if (Build.VERSION.SDK_INT >= 31) {
@@ -138,6 +154,35 @@ public class BleBackgroundScanPlugin extends Plugin {
         requestPermissionForAliases(aliases.toArray(new String[0]), call, "checkPermission");
     }
 
+    @PluginMethod(returnType = PluginMethod.RETURN_PROMISE)
+    public void setBlacklistForDevices(PluginCall call) {
+        JSObject blacklist = call.getObject("blacklist", new JSObject());
+        if (blacklist == null) {
+            return;
+        }
+        List<String> ignoredTiles = List.of(blacklist.getString("tilesID", "").split(";"));
+        int airTagThreshold = blacklist.getInteger("airTagThreshold", 0);
+        int smartTagThreshold = blacklist.getInteger("smartTagThreshold", 0);
+        BlacklistForDevices blacklistForDevices = new BlacklistForDevices();
+        blacklistForDevices.airTagThreshold = airTagThreshold;
+        blacklistForDevices.smartTagThreshold = smartTagThreshold;
+        blacklistForDevices.tilesID = ignoredTiles;
+        deviceScannerService.setBlacklistForDevices(blacklistForDevices, call);
+    }
+
+    @PluginMethod(returnType = PluginMethod.RETURN_PROMISE)
+    public void getThreateningDevices(PluginCall call) {
+        List<Boolean> grantedPermissions = aliases.stream().map((String alias) -> {
+            return getPermissionState(alias) == PermissionState.GRANTED;
+        }).collect(Collectors.toList());
+        if (grantedPermissions.stream().allMatch((Boolean permission) -> permission)) {
+            threatDetectionService.getThreateningDevices(call);
+        }
+        else {
+            call.reject("Permission denied.");
+        }
+
+    }
 
     @PermissionCallback
     private void checkPermission(PluginCall call) {
@@ -165,6 +210,7 @@ public class BleBackgroundScanPlugin extends Plugin {
         this.notificationService = NotificationService.getInstance(getContext());
         this.deviceScannerService = DeviceScannerService.getInstance(getContext(), bluetoothAdapter, this.scanResultRepository);
         this.threatDetectionService = ThreatDetectionService.getInstance(getContext(), scanResultRepository);
+        this.dataPurgingService = DataPurgingService.getInstance(scanResultRepository);
         notificationService.createChannel(
                 "Scanning progress Notification",
                 "Notifications for informing about scanning",
@@ -181,6 +227,7 @@ public class BleBackgroundScanPlugin extends Plugin {
             call.reject("BLE is not available.");
             return;
         }
+        this.deviceScannerService.initializeBlacklistForAirTagAndSmartTag();
         call.resolve();
     }
 

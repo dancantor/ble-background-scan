@@ -11,11 +11,11 @@ import java.util.stream.Collectors;
 public class ConstantDeviceIdStrategy extends ThreatDetectionStrategy{
     @Override
     public List<ScanResultExtended> computeThreateningDevices(List<ScanResultExtended> allScanResults) {
-        Log.i("ConstantDetection", "Scanning for Tiles");
+//        Log.i("ConstantDetection", "Scanning for Tiles");
         return allScanResults.stream()
                 .filter(
-                        scanResultExtended -> getMaximumTimeRange(List.of(scanResultExtended)) >= 1 &&
-                                getMaximumDistance(List.of(scanResultExtended)) >= 0.1)
+                        scanResultExtended -> getMaximumTimeRange(List.of(scanResultExtended)) >= 30 &&
+                                getMaximumDistance(List.of(scanResultExtended)) >= 0.5)
                 .collect(Collectors.toList());
     }
 }

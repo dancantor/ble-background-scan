@@ -7,12 +7,16 @@ import androidx.room.Room;
 import com.ubb.bachelor.blebackgroundscan.data.data_source.ScanRecordDao;
 import com.ubb.bachelor.blebackgroundscan.data.data_source.ScanRecordDatabase;
 import com.ubb.bachelor.blebackgroundscan.domain.exception.ScanRecordRepositoryNotInitialized;
+import com.ubb.bachelor.blebackgroundscan.domain.model.BlacklistForAirTagAndSmartTag;
+import com.ubb.bachelor.blebackgroundscan.domain.model.BlacklistForTiles;
 import com.ubb.bachelor.blebackgroundscan.domain.model.LocationModel;
 import com.ubb.bachelor.blebackgroundscan.domain.model.ManufacturerData;
 import com.ubb.bachelor.blebackgroundscan.domain.model.ScanResultExtended;
+import com.ubb.bachelor.blebackgroundscan.domain.model.ScanResultModel;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 import io.reactivex.Completable;
 import io.reactivex.Single;
@@ -63,6 +67,49 @@ public class ScanResultRepository {
 
     public Single<List<ScanResultExtended>> getScanResults() {
         return dao.getScanResults();
+    }
+
+    public Single<Boolean> isScanResultInTileBlacklist(ScanResultExtended scanResult) {
+        return dao.getBlacklistForTiles()
+                .map(blacklistForTiles ->
+                        blacklistForTiles
+                                .stream()
+                                .anyMatch(ignoredDevice ->
+                                        ignoredDevice.tileId.equals(scanResult.scanResult.deviceId)
+                                )
+                );
+    }
+
+    public Completable deleteAllTilesFromBlacklist() {
+        return dao.deleteAllTilesFromBlacklist();
+    }
+
+    public Completable bulkInsertBlacklistForTiles(List<BlacklistForTiles> blacklistForTiles) {
+        return dao.insertAllBlacklistForTiles(blacklistForTiles);
+    }
+
+    public Single<BlacklistForAirTagAndSmartTag> getBlacklistForAirTagAndSmartTag() {
+        return dao.getBlacklistForAirTagsAndSmartTags();
+    }
+
+    public Completable updateBlacklistForAirTagAndSmartTag(BlacklistForAirTagAndSmartTag blacklist) {
+        return dao.updateBlacklistForAirTagAndSmartTag(blacklist);
+    }
+
+    public Completable insertBlacklistForAirTagAndSmartTag(BlacklistForAirTagAndSmartTag blacklist) {
+        return dao.insertBlacklistForAirTagAndSmartTag(blacklist);
+    }
+
+    public Completable deleteLocation(LocationModel location) {
+        return dao.deleteLocation(location);
+    }
+
+    public Completable deleteManufacturerDataByDeviceId(String deviceId) {
+        return dao.deleteManufacturerDataForDeviceId(deviceId);
+    }
+
+    public Completable deleteScanResult(ScanResultModel scanResult) {
+        return dao.deleteScanResult(scanResult);
     }
 
 }

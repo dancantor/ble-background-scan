@@ -1,37 +1,29 @@
 package com.ubb.bachelor.blebackgroundscan.domain.service.strategy;
 
-import android.annotation.SuppressLint;
-
 import com.ubb.bachelor.blebackgroundscan.domain.model.LocationModel;
 import com.ubb.bachelor.blebackgroundscan.domain.model.ScanResultExtended;
 
-import java.time.Duration;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.Period;
-import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
-import java.util.Date;
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 public abstract class ThreatDetectionStrategy {
     public abstract List<ScanResultExtended> computeThreateningDevices(List<ScanResultExtended> allScanResults);
 
     protected double getMaximumTimeRange(List<ScanResultExtended> allScanResults) {
-        long maxHoursInterval = 0;
+        long maxMinutesInterval = 0;
         for(ScanResultExtended scanResultExtended : allScanResults) {
             for (int i = 0; i < scanResultExtended.location.size(); ++i) {
                 for (int j = i + 1; j < scanResultExtended.location.size(); ++j) {
                     LocationModel location1 = scanResultExtended.location.get(i);
                     LocationModel location2 = scanResultExtended.location.get(j);
-                    if (computeHourIntervalBetweenTwoDates(location1.datetime, location2.datetime) >= maxHoursInterval) {
-                        maxHoursInterval = computeHourIntervalBetweenTwoDates(location1.datetime, location2.datetime);
+                    if (computeIntervalBetweenTwoDates(location1.datetime, location2.datetime, ChronoUnit.MINUTES) >= maxMinutesInterval) {
+                        maxMinutesInterval = computeIntervalBetweenTwoDates(location1.datetime, location2.datetime, ChronoUnit.MINUTES);
                     }
                 }
             }
         }
-        return maxHoursInterval;
+        return maxMinutesInterval;
     }
 
     protected double getMaximumDistance(List<ScanResultExtended> allScanResults) {
@@ -50,8 +42,8 @@ public abstract class ThreatDetectionStrategy {
         return maxDistance;
     }
 
-    private long computeHourIntervalBetweenTwoDates(LocalDateTime date1, LocalDateTime date2) {
-        return Math.abs(ChronoUnit.HOURS.between(date1, date2));
+    protected long computeIntervalBetweenTwoDates(LocalDateTime date1, LocalDateTime date2, ChronoUnit unit) {
+        return Math.abs(unit.between(date1, date2));
     }
 
     private double computeDistanceBetweenTwoBeacons(LocationModel location1, LocationModel location2) {

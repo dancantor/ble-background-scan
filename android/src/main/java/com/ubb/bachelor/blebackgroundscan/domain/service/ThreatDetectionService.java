@@ -2,19 +2,21 @@ package com.ubb.bachelor.blebackgroundscan.domain.service;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
-import android.util.Log;
 
+import com.getcapacitor.PluginCall;
 import com.ubb.bachelor.blebackgroundscan.R;
 import com.ubb.bachelor.blebackgroundscan.data.repository.ScanResultRepository;
-import com.ubb.bachelor.blebackgroundscan.domain.exception.NotificationServiceNotInstantiated;
 import com.ubb.bachelor.blebackgroundscan.domain.exception.ThreatServiceNotInstantiated;
+import com.ubb.bachelor.blebackgroundscan.domain.mapper.ScanResultExtendedToJSObject;
 import com.ubb.bachelor.blebackgroundscan.domain.model.ScanResultExtended;
 import com.ubb.bachelor.blebackgroundscan.domain.service.strategy.ConstantDeviceIdStrategy;
 import com.ubb.bachelor.blebackgroundscan.domain.service.strategy.RotatingDeviceIdStrategy;
 import com.ubb.bachelor.blebackgroundscan.domain.service.strategy.ThreatDetectionStrategy;
 
+import java.util.ArrayList;
 import java.util.List;
 
+import io.reactivex.Observable;
 import io.reactivex.schedulers.Schedulers;
 
 public class ThreatDetectionService {
@@ -42,24 +44,23 @@ public class ThreatDetectionService {
         }
         return ThreatDetectionService.instance;
     }
-
     public void startThreatDetection() {
-        detectThreatForBeacons("AirTag", new RotatingDeviceIdStrategy());
-        detectThreatForBeacons("SmartTag", new RotatingDeviceIdStrategy());
-        detectThreatForBeacons("Tile", new ConstantDeviceIdStrategy());
+        detectThreatForBeacons("AirTag", new RotatingDeviceIdStrategy(), 2);
+        detectThreatForBeacons("SmartTag", new RotatingDeviceIdStrategy(), 3);
+        detectThreatForBeacons("Tile", new ConstantDeviceIdStrategy(), 4);
     }
 
     @SuppressLint("CheckResult")
-    private void detectThreatForBeacons(String deviceModel, ThreatDetectionStrategy strategy) {
+    private void detectThreatForBeacons(String deviceModel, ThreatDetectionStrategy strategy, int notificationId) {
         scanResultRepository.getScannedDevicesByModel(deviceModel)
                 .subscribeOn(Schedulers.io())
                 .subscribe((List<ScanResultExtended> scanResults) -> {
                     List<ScanResultExtended> possibleAirTagThreats = strategy.computeThreateningDevices(scanResults);
                     if(possibleAirTagThreats.size() > 0) {
                         this.notificationService.sendNotification(
-                                2,
+                                notificationId,
                                 notificationService.createNotification(
-                                        "2",
+                                        deviceModel,
                                         "Possible " +  deviceModel + " device discovered in your possession",
                                         false,
                                         "2",
@@ -71,5 +72,23 @@ public class ThreatDetectionService {
     }
 
 
-
+    @SuppressLint("CheckResult")
+    public void getThreateningDevices(PluginCall call) {
+        var rotatingIdStrategy = new RotatingDeviceIdStrategy();
+        var constantIdStrategy = new ConstantDeviceIdStrategy();
+        Observable.combineLatest(
+                scanResultRepository.getScannedDevicesByModel("AirTag").toObservable(),
+                scanResultRepository.getScannedDevicesByModel("SmartTag").toObservable(),
+                scanResultRepository.getScannedDevicesByModel("Tile").toObservable(),
+                (airTagDevices, smartTagDevices, tileDevices) -> {
+                    List<ScanResultExtended> threats = new ArrayList<>();
+                    threats.addAll(rotatingIdStrategy.computeThreateningDevices(airTagDevices));
+                    threats.addAll(rotatingIdStrategy.computeThreateningDevices(smartTagDevices));
+                    threats.addAll(constantIdStrategy.computeThreateningDevices(tileDevices));
+                    return threats;
+                }
+        )
+                .subscribeOn(Schedulers.io())
+                .subscribe(possibleThreats -> call.resolve(ScanResultExtendedToJSObject.mapPossibleThreateningDeviceListToJSObject(possibleThreats)));
+    }
 }

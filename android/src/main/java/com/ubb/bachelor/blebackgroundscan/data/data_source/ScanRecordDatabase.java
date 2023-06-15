@@ -5,6 +5,8 @@ import androidx.room.Database;
 import androidx.room.RoomDatabase;
 import androidx.room.TypeConverters;
 
+import com.ubb.bachelor.blebackgroundscan.domain.model.BlacklistForAirTagAndSmartTag;
+import com.ubb.bachelor.blebackgroundscan.domain.model.BlacklistForTiles;
 import com.ubb.bachelor.blebackgroundscan.domain.model.DateConverter;
 import com.ubb.bachelor.blebackgroundscan.domain.model.LocationModel;
 import com.ubb.bachelor.blebackgroundscan.domain.model.ManufacturerData;
@@ -13,7 +15,13 @@ import com.ubb.bachelor.blebackgroundscan.domain.model.ScanResultModel;
 import java.util.Arrays;
 
 @Database(
-        entities = {ScanResultModel.class, ManufacturerData.class, LocationModel.class},
+        entities = {
+                ScanResultModel.class,
+                ManufacturerData.class,
+                LocationModel.class,
+                BlacklistForTiles.class,
+                BlacklistForAirTagAndSmartTag.class
+        },
         version = 1,
         exportSchema = false
 )

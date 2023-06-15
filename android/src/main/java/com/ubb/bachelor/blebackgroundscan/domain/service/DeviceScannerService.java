@@ -2,6 +2,7 @@ package com.ubb.bachelor.blebackgroundscan.domain.service;
 
 import static android.content.Context.NOTIFICATION_SERVICE;
 
+import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.NotificationManager;
 import android.bluetooth.BluetoothAdapter;
@@ -9,6 +10,7 @@ import android.bluetooth.le.BluetoothLeScanner;
 import android.bluetooth.le.ScanCallback;
 import android.bluetooth.le.ScanResult;
 import android.content.Context;
+import android.content.pm.PackageManager;
 import android.location.Location;
 import android.location.LocationManager;
 import android.os.Build;
@@ -18,13 +20,19 @@ import android.os.SystemClock;
 import android.util.Log;
 
 import androidx.annotation.RequiresApi;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 import androidx.core.location.LocationManagerCompat;
 
 import com.getcapacitor.Logger;
+import com.getcapacitor.Plugin;
+import com.getcapacitor.PluginCall;
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.GoogleApiAvailability;
 import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.location.Priority;
+import com.ubb.bachelor.blebackgroundscan.R;
+import com.ubb.bachelor.blebackgroundscan.data.dto.BlacklistForDevices;
 import com.ubb.bachelor.blebackgroundscan.data.repository.ScanResultRepository;
 import com.ubb.bachelor.blebackgroundscan.domain.callbacks.LocationResultCallback;
 import com.ubb.bachelor.blebackgroundscan.domain.exception.DeviceScannerNotInstantiated;
@@ -32,6 +40,8 @@ import com.ubb.bachelor.blebackgroundscan.domain.exception.InvalidHexadecimalCha
 import com.ubb.bachelor.blebackgroundscan.domain.exception.NotificationServiceNotInstantiated;
 import com.ubb.bachelor.blebackgroundscan.domain.mapper.ByteMapper;
 import com.ubb.bachelor.blebackgroundscan.domain.mapper.ScanResultMapper;
+import com.ubb.bachelor.blebackgroundscan.domain.model.BlacklistForAirTagAndSmartTag;
+import com.ubb.bachelor.blebackgroundscan.domain.model.BlacklistForTiles;
 import com.ubb.bachelor.blebackgroundscan.domain.model.ScanResultExtended;
 
 import org.apache.commons.lang3.ArrayUtils;
@@ -41,7 +51,12 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.stream.Collectors;
 
+import io.reactivex.Completable;
+import io.reactivex.Observable;
 import io.reactivex.schedulers.Schedulers;
 
 public class DeviceScannerService {
@@ -51,6 +66,8 @@ public class DeviceScannerService {
     private BluetoothLeScanner bluetoothLeScanner;
     private ScanResultRepository scanResultRepository;
     private NotificationService notificationService;
+    private Set<String> discoveredAirTags;
+    private Set<String> discoveredSmartTags;
     private Boolean isScanning = false;
     private final String SCANNING_TAG = DeviceScannerService.class.getSimpleName();
     private long MAX_AGE_SECONDS = 100L;
@@ -63,6 +80,8 @@ public class DeviceScannerService {
         this.bluetoothLeScanner = bluetoothAdapter.getBluetoothLeScanner();
         this.scanResultRepository = scanResultRepository;
         this.notificationService = NotificationService.getInstance(context);
+        this.discoveredAirTags = new HashSet<>();
+        this.discoveredSmartTags = new HashSet<>();
     }
 
     public static DeviceScannerService getInstance(
@@ -89,7 +108,6 @@ public class DeviceScannerService {
         public void onScanResult(int callbackType, ScanResult result) {
             super.onScanResult(callbackType, result);
             if (!isTrackingDevice(result)) return;
-
             getCurrentLocation(new LocationResultCallback() {
                 @Override
                 public void success(Location location) {
@@ -137,32 +155,73 @@ public class DeviceScannerService {
     @SuppressLint({"CheckResult"})
     private void addScanResultToDatabase(Location location, ScanResult result) {
         var scanResult = ScanResultMapper.scanResultToScanResultModel(result, location);
-        if(computeDistanceToDevice(scanResult) > 2) {
-            Log.i("Distance", computeDistanceToDevice(scanResult).toString());
-            return;
-        }
+//        if(computeDistanceToDevice(scanResult) > 2) {
+//            Log.i("Distance", computeDistanceToDevice(scanResult).toString());
+//            return;
+//        }
         if (isAirTagDevice(scanResult)) {
             scanResult.scanResult.deviceModel = "AirTag";
-            scanResultRepository.insertScanResult(scanResult)
+            scanResultRepository.getBlacklistForAirTagAndSmartTag()
+                    .flatMapCompletable(blacklist -> {
+                        if (discoveredAirTags.size() < blacklist.ignoredAirTags) {
+                            discoveredAirTags.add(scanResult.scanResult.deviceId);
+                            return Completable.complete();
+                        }
+                        else if (!discoveredAirTags.contains(scanResult.scanResult.deviceId)) {
+                            return scanResultRepository.insertScanResult(scanResult);
+                        }
+                        return Completable.complete();
+                    })
                     .subscribeOn(Schedulers.io())
                     .subscribe(() -> Log.i("Apple", scanResult.scanResult.deviceId));
         }
         if (isTileDevice(result)) {
             scanResult.scanResult.deviceModel = "Tile";
-            scanResultRepository.insertScanResult(scanResult)
+            scanResultRepository.isScanResultInTileBlacklist(scanResult)
+                    .flatMapCompletable(isInBlacklist -> {
+                        if (isInBlacklist) {
+                            return Completable.complete();
+                        }
+                        return scanResultRepository.insertScanResult(scanResult);
+                    })
                     .subscribeOn(Schedulers.io())
                     .subscribe(() -> Log.i("Tile", scanResult.scanResult.deviceId));
         }
         if (isSmartTagDevice(result)) {
             scanResult.scanResult.deviceModel = "SmartTag";
-            scanResultRepository.insertScanResult(scanResult)
+            scanResultRepository.getBlacklistForAirTagAndSmartTag()
+                    .flatMapCompletable(blacklist -> {
+                        if (discoveredSmartTags.size() < blacklist.ignoredSmartTags) {
+                            discoveredSmartTags.add(scanResult.scanResult.deviceId);
+                            return Completable.complete();
+                        }
+                        else if (!discoveredSmartTags.contains(scanResult.scanResult.deviceId)) {
+                            return scanResultRepository.insertScanResult(scanResult);
+                        }
+                        return Completable.complete();
+                    })
                     .subscribeOn(Schedulers.io())
-                    .subscribe(() -> Log.i("Samsung", scanResult.scanResult.deviceId));
+                    .subscribe(() -> Log.i("SmartTag", scanResult.scanResult.deviceId));
         }
     }
 
-    @SuppressLint("MissingPermission")
     public void startScanning() {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED) {
+            return;
+        }
+        if (!bluetoothAdapter.isEnabled()) {
+            this.notificationService.sendNotification(
+                    1,
+                    this.notificationService.createNotification(
+                            "no_bluetooth",
+                            "Bluetooth not enabled, so background scan is not available",
+                            false,
+                            "1",
+                            R.drawable.no_bluetooth
+                    )
+            );
+            return;
+        }
         if (!isScanning) {
             setTimeoutForStopScanning();
             Logger.debug("SCANNING_TAG", "Started Scanning");
@@ -176,6 +235,8 @@ public class DeviceScannerService {
         isScanning = false;
         this.notificationService.removeNotification(1);
         bluetoothLeScanner.stopScan(scanCallback);
+        discoveredAirTags = new HashSet<>();
+        discoveredSmartTags = new HashSet<>();
     }
 
     private boolean isStatusByteOfAirTag(String data) {
@@ -195,7 +256,6 @@ public class DeviceScannerService {
         stopScanHandler.postDelayed(this::stopScanning, 15000);
     }
 
-    @SuppressLint("MissingPermission")
     private void getCurrentLocation(LocationResultCallback resultCallback) {
         int resultCode = GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(context);
         if (resultCode == ConnectionResult.SUCCESS) {
@@ -206,10 +266,16 @@ public class DeviceScannerService {
 
                 try {
                     networkEnabled = lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER);
-                } catch (Exception ex) {}
+                } catch (Exception ex) {
+                }
 
                 int lowPriority = networkEnabled ? Priority.PRIORITY_BALANCED_POWER_ACCURACY : Priority.PRIORITY_LOW_POWER;
 
+                if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
+                        ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                    resultCallback.error("Location permission unavailable");
+                    return;
+                }
                 LocationServices
                         .getFusedLocationProviderClient(context)
                         .getLastLocation()
@@ -218,8 +284,7 @@ public class DeviceScannerService {
                                 location -> {
                                     if (location != null && locationMatchesMinimumRequirements(location)) {
                                         resultCallback.success(location);
-                                    }
-                                    else {
+                                    } else {
                                         resultCallback.error("Location unavailable");
                                     }
                                 }
@@ -255,5 +320,41 @@ public class DeviceScannerService {
             scanResult.scanResult.txPower = -69;
         }
         return Math.pow(10F, (scanResult.scanResult.txPower - scanResult.scanResult.rssi) / (10.0 * 2));
+    }
+
+    @SuppressLint("CheckResult")
+    public void setBlacklistForDevices(BlacklistForDevices blacklistForDevices, PluginCall call) {
+        var blacklistForTiles = blacklistForDevices.tilesID
+                .stream()
+                .map(tileId -> {
+                    BlacklistForTiles blacklistForTile = new BlacklistForTiles();
+                    blacklistForTile.tileId = tileId;
+                    return blacklistForTile;
+                }).collect(Collectors.toList());
+        scanResultRepository.deleteAllTilesFromBlacklist()
+                .andThen(scanResultRepository.bulkInsertBlacklistForTiles(blacklistForTiles))
+                .subscribeOn(Schedulers.io())
+                .subscribe(() -> Log.i("TileBlacklist", "Tiles successfully added to blacklist"));
+        var blacklistForAirTagAndSmartTag = new BlacklistForAirTagAndSmartTag();
+        blacklistForAirTagAndSmartTag.id = 1;
+        blacklistForAirTagAndSmartTag.ignoredAirTags = blacklistForDevices.airTagThreshold;
+        blacklistForAirTagAndSmartTag.ignoredSmartTags = blacklistForDevices.smartTagThreshold;
+        scanResultRepository.updateBlacklistForAirTagAndSmartTag(blacklistForAirTagAndSmartTag)
+                .subscribeOn(Schedulers.io())
+                .subscribe(() -> {
+                    Log.i("AirTag&SmartTag_Blacklist", "AirTags and SmartTags successfully added to blacklist");
+                    call.resolve();
+                });
+
+    }
+
+    public void initializeBlacklistForAirTagAndSmartTag() {
+        var blacklistForAirTagAndSmartTag = new BlacklistForAirTagAndSmartTag();
+        blacklistForAirTagAndSmartTag.id = 1;
+        blacklistForAirTagAndSmartTag.ignoredAirTags = 0;
+        blacklistForAirTagAndSmartTag.ignoredSmartTags = 0;
+        scanResultRepository.insertBlacklistForAirTagAndSmartTag(blacklistForAirTagAndSmartTag)
+                .subscribeOn(Schedulers.io())
+                .subscribe(() -> Log.i("AirTag&SmartTag_Blacklist", "AirTags and SmartTags successfully added to blacklist"));
     }
 }
